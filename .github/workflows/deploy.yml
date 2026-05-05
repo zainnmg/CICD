@@ -1,0 +1,88 @@
+###############################################################################
+# CD Pipeline - Deploy to ECS
+#
+# Triggers: after the build workflow completes successfully on main
+# What it does:
+#   1. Authenticates to AWS via OIDC
+#   2. Calls the reusable ECS deploy workflow to handle the task definition
+#      update, service update and stability wait
+#
+# Why this is separate from build:
+#   - Build can run on PRs without deploying
+#   - Deploy only runs when code hits main
+#   - You can re-run a deploy without rebuilding
+#   - Clear audit trail: "build passed" vs "deploy succeeded"
+#
+# Why CI/CD owns this, not Terraform:
+#   Terraform owns INFRASTRUCTURE (cluster, service, ALB, IAM, security groups).
+#   CI/CD owns APPLICATION LIFECYCLE (new image > new task def > rolling deploy).
+#   If Terraform managed the task definition image tag, every deploy would need
+#   terraform apply and Terraform would fight with CI/CD over the current state.
+#   Instead, Terraform uses ignore_changes on the task definition and CI/CD
+#   handles deploys directly via the AWS API.
+###############################################################################
+
+name: CD - Deploy to ECS
+
+on:
+  workflow_run:
+    workflows: ["CI - Build & Push"]
+    types: [completed]
+    branches: [main]
+
+# Only one deploy at a time - prevents race conditions
+# If two builds finish back-to-back, only the latest deploy runs
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: my-app             # Change to your ECR repo name
+  ECS_CLUSTER: my-cluster            # Change to your ECS cluster name
+  ECS_SERVICE: my-service            # Change to your ECS service name
+  CONTAINER_NAME: app                # Container name in your task definition
+
+jobs:
+  # Step 1: Authenticate to AWS and build the image URI
+  auth:
+    name: Authenticate to AWS
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      image: ${{ steps.image.outputs.uri }}
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image URI
+        id: image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          echo "uri=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+
+  # Step 2: Call the reusable deploy workflow
+  # This is the same pattern as the greeting example but for real infrastructure.
+  # If you had multiple services (api, worker, cron), you'd call this once per service.
+  deploy:
+    needs: auth
+    uses: ./.github/workflows/reusable-ecs-deploy.yml
+    with:
+      cluster: my-cluster
+      service: my-service
+      container_name: app
+      image: ${{ needs.auth.outputs.image }}
+      aws_region: eu-west-1
