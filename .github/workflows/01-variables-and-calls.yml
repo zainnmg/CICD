@@ -1,110 +1,200 @@
+# `name` is the friendly workflow title shown in the GitHub Actions UI.
 name: "01 - Variables and Workflow Calls"
 
+# `on` defines the events that can start this workflow.
 on:
+  # `push` means this workflow runs when commits are pushed.
   push:
+    # Limit push runs to the `main` branch so random branches do not trigger it.
     branches: [main]
+  # `pull_request` means this workflow runs when a PR targets the listed branch.
   pull_request:
+    # Running on PRs gives feedback before code is merged.
     branches: [main]
+  # `workflow_dispatch` adds the manual "Run workflow" button in GitHub.
   workflow_dispatch:
+    # `inputs` are form fields a human fills in when manually starting the run.
     inputs:
+      # `target_environment` is the input key used later as `inputs.target_environment`.
       target_environment:
+        # `description` is helper text shown beside the manual input.
         description: "Environment name to pass into the reusable workflow"
+        # `required: true` means GitHub will not start the manual run without it.
         required: true
+        # `default` pre-fills the field so the learner has a safe starting value.
         default: "dev"
+        # `choice` renders a dropdown instead of free text.
         type: choice
+        # `options` are the allowed dropdown values.
         options:
+          # `dev` usually means a low-risk development environment.
           - dev
+          # `staging` usually mirrors production for final checks.
           - staging
+          # `prod` represents production and should normally have approvals.
           - prod
+      # `release_version` is a second manual input for a tag, version, or SHA.
       release_version:
+        # Leaving this blank teaches fallback/default logic inside a job.
         description: "Optional release label. Leave blank to use the commit SHA."
+        # `false` means this input is optional for manual runs.
         required: false
+        # `string` means GitHub accepts normal text.
         type: string
+      # This boolean input controls whether the final dry-run deploy preview runs.
       run_manual_deploy_preview:
+        # The description explains the checkbox in the manual workflow form.
         description: "Run the fake deploy preview after checks finish?"
+        # Required booleans avoid GitHub expression surprises from missing values.
         required: true
+        # Defaulting to false keeps the learning run conservative.
         default: false
+        # `boolean` renders this as a checkbox in the GitHub UI.
         type: boolean
 
+# `permissions` sets the default GitHub token access for this workflow.
 permissions:
+  # `contents: read` is enough to checkout/read the repo; no write access needed.
   contents: read
 
-# Workflow-level env is available to every job unless a lower scope overrides it.
+# `env` at the top level creates workflow-level environment variables.
 env:
+  # This value is available to every job unless a narrower scope overrides it.
   WORKFLOW_SCOPE_EXAMPLE: "visible to every job in this workflow"
+  # `vars.DEFAULT_REGION` reads a GitHub Actions variable; `||` provides fallback.
   DEFAULT_REGION: ${{ vars.DEFAULT_REGION || 'eu-west-2' }}
 
+# `jobs` is the list of units of work GitHub will run.
 jobs:
+  # `explain-variables` is the machine-readable job id.
   explain-variables:
+    # `name` is the human-friendly job label shown in the UI.
     name: Explain Variable Storage
+    # `runs-on` chooses the runner image; `ubuntu-latest` is a fresh Linux VM.
     runs-on: ubuntu-latest
 
-    # Job-level env is available to every step in this job only.
+    # Job-level `env` is available to every step inside only this job.
     env:
+      # This demonstrates that job env has a narrower scope than workflow env.
       JOB_SCOPE_EXAMPLE: "visible only inside explain-variables"
+      # Manual input is used when present; push/PR runs fall back to `dev`.
       TARGET_ENVIRONMENT: ${{ inputs.target_environment || 'dev' }}
 
+    # `outputs` exposes values from this job to downstream jobs.
     outputs:
+      # This maps the job output to a specific step output created below.
       release_version: ${{ steps.version.outputs.release_version }}
 
+    # `steps` are the sequential commands/actions inside this job.
     steps:
+      # This step downloads the repository into the runner.
       - name: Checkout repository
+        # `uses` runs a prebuilt action instead of shell commands.
         uses: actions/checkout@v4
 
+      # This step calculates the release version used by later jobs.
       - name: Choose release version
+        # `id` lets later expressions reference this step as `steps.version`.
         id: version
+        # `run: |` starts a multi-line shell script.
         run: |
+          # Copy the manual input into a shell variable.
           RELEASE_VERSION="${{ inputs.release_version }}"
 
+          # If the manual input was empty, use the first 7 chars of the commit SHA.
           if [ -z "$RELEASE_VERSION" ]; then
+            # `GITHUB_SHA` is automatically provided by GitHub Actions.
             RELEASE_VERSION="${GITHUB_SHA::7}"
+          # `fi` closes the Bash if-statement.
           fi
 
+          # Writing `name=value` to `$GITHUB_OUTPUT` creates a step output.
           echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
 
+      # This step prints safe examples of where variables come from.
       - name: Show where values came from
+        # Step-level `env` is available only to this one step.
         env:
-          # Step-level env is the narrowest scope. Use it for one-off values.
+          # This is the narrowest env scope, useful for one-off values.
           STEP_SCOPE_EXAMPLE: "visible only inside this step"
+          # This checks whether a secret exists without printing the secret value.
           DEMO_API_TOKEN_PRESENT: ${{ secrets.DEMO_API_TOKEN != '' }}
+        # The shell commands below run on the Ubuntu runner.
         run: |
+          # Print the workflow-level variable.
           echo "Workflow env: $WORKFLOW_SCOPE_EXAMPLE"
+          # Print the GitHub Actions variable or fallback value.
           echo "Repository/environment variable DEFAULT_REGION: $DEFAULT_REGION"
+          # Print the job-level environment variable.
           echo "Job env TARGET_ENVIRONMENT: $TARGET_ENVIRONMENT"
+          # Print the step-level environment variable.
           echo "Step env: $STEP_SCOPE_EXAMPLE"
+          # Print only whether the secret exists, never the secret itself.
           echo "Secret DEMO_API_TOKEN configured? $DEMO_API_TOKEN_PRESENT"
+          # Print the release version calculated by the previous step.
           echo "Release version: ${{ steps.version.outputs.release_version }}"
 
+      # This step writes Markdown to the run summary page in GitHub.
       - name: Write learning summary
+        # Multi-line shell script for building the summary.
         run: |
+          # The braces group several echo commands into one redirect.
           {
+            # Add a heading to the GitHub job summary.
             echo "### Variable storage demo"
+            # Add a blank line for Markdown readability.
             echo ""
+            # Start a Markdown table.
             echo "| Value | Where it is stored | Why use it |"
+            # Add the Markdown separator row.
             echo "| --- | --- | --- |"
+            # Explain the workflow-level env example.
             echo "| WORKFLOW_SCOPE_EXAMPLE | Workflow env block | Shared non-sensitive value for this file |"
+            # Explain the manual input/job env example.
             echo "| TARGET_ENVIRONMENT | Manual input/job env | Value chosen per run |"
+            # Explain the GitHub Actions variable example.
             echo "| DEFAULT_REGION | GitHub Actions variable | Non-secret config managed in GitHub UI |"
+            # Explain the secret example.
             echo "| DEMO_API_TOKEN | GitHub Actions secret | Sensitive value that must not print in logs |"
+          # `$GITHUB_STEP_SUMMARY` is a special file GitHub turns into a UI summary.
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # This job demonstrates calling another workflow instead of defining steps here.
   call-reusable-quality-check:
+    # Human-readable job name.
     name: Call Reusable Quality Check
+    # `needs` waits for the variable explanation job and makes its outputs available.
     needs: explain-variables
+    # `uses` at the job level calls a reusable workflow.
     uses: ./.github/workflows/reusable-quality-check.yml
+    # `with` passes typed inputs into the reusable workflow.
     with:
+      # This is the service name the reusable workflow will check.
       service_name: "demo-api"
+      # Pass the manual environment input, or use `dev` on push/PR runs.
       deploy_environment: ${{ inputs.target_environment || 'dev' }}
+      # Pass the output produced by the first job.
       release_version: ${{ needs.explain-variables.outputs.release_version }}
+    # `secrets: inherit` lets the reusable workflow access caller secrets.
     secrets: inherit
 
+  # This optional final job behaves like a fake deploy preview.
   fake-deploy-preview:
+    # Human-readable job name.
     name: Fake Deploy Preview
+    # This job starts only after the reusable workflow job succeeds.
     needs: call-reusable-quality-check
+    # The `if` condition skips this job unless the manual checkbox is true.
     if: ${{ inputs.run_manual_deploy_preview == true }}
+    # Use a fresh Ubuntu runner for this job.
     runs-on: ubuntu-latest
+    # The job has one simple demonstration step.
     steps:
+      # This step shows what would happen without changing anything.
       - name: Preview deploy command
+        # Multi-line shell script.
         run: |
+          # Make it explicit this is safe and non-destructive.
           echo "This is a dry run. Nothing is deployed."
+          # Explain where a real deployment command would normally go.
           echo "In a real pipeline this job might run after manual approval."

@@ -1,14 +1,23 @@
-app_name    = "ci-cd-lab"
+# `app_name` overrides the default from variables.tf.
+app_name = "ci-cd-lab"
+# `environment` is required because variables.tf has no default for it.
 environment = "dev"
-aws_region  = "eu-west-2"
-image_tag   = "demo-1"
+# `aws_region` is non-secret config, so it is safe in an example file.
+aws_region = "eu-west-2"
+# `image_tag` models a release tag or Docker image tag.
+image_tag = "demo-1"
 
+# `reviewers` is a list, so values go inside square brackets.
 reviewers = [
+  # Replace this placeholder after copying to terraform.tfvars.
   "your-github-username",
 ]
 
+# `tags` is a map, so it uses key/value pairs inside braces.
 tags = {
-  owner       = "devops-learning"
+  # `owner` is an example tag that helps identify responsibility.
+  owner = "devops-learning"
+  # `cost_center` is a common finance/governance tag in real cloud accounts.
   cost_center = "training"
 }
 

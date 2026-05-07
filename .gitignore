@@ -1,9 +1,15 @@
+# Ignore Terraform's local plugin/module cache directory.
 .terraform/
+# Ignore the main Terraform state file because it can contain infrastructure details.
 *.tfstate
+# Ignore Terraform backup or versioned state files for the same reason.
 *.tfstate.*
+# Ignore saved plan files because they can contain sensitive planned values.
 *.tfplan
+# Ignore local variable files because they often contain account-specific config.
 terraform.tfvars
+# Ignore auto-loaded tfvars files because they may also contain local or sensitive values.
 *.auto.tfvars
 
-# Local OS/editor noise
+# Local OS/editor noise.
 .DS_Store

@@ -1,88 +1,164 @@
+# This name appears in the GitHub Actions UI when the workflow is called.
 name: "Reusable - Quality Check"
 
+# Reusable workflows use `workflow_call` instead of push/PR/manual triggers.
 on:
+  # `workflow_call` means another workflow can call this like a function.
   workflow_call:
+    # Inputs are the parameters the caller must or may provide.
     inputs:
+      # `service_name` identifies what application/service is being checked.
       service_name:
+        # This description appears in GitHub's workflow metadata.
         description: "Name of the service being checked"
+        # Required inputs must be supplied by the caller.
         required: true
+        # `string` is the simplest input type for labels and names.
         type: string
+      # `deploy_environment` tells the reusable workflow the target environment.
       deploy_environment:
+        # The description documents the purpose for future readers.
         description: "Environment the caller wants to target"
+        # The caller must choose or pass an environment.
         required: true
+        # The value is plain text.
         type: string
+      # `release_version` is the build/tag/SHA being inspected.
       release_version:
+        # This explains what kind of value is expected.
         description: "Release label or image tag being inspected"
+        # The caller must pass a release identifier.
         required: true
+        # Store the release identifier as a string.
         type: string
+    # `secrets` declares secret values this reusable workflow can receive.
     secrets:
+      # `DEMO_API_TOKEN` is optional because this lab should run without setup.
       DEMO_API_TOKEN:
+        # The description explains that this is only a demo secret.
         description: "Optional demo secret passed by the caller"
+        # `false` lets the workflow run even if the secret is not configured.
         required: false
+    # Workflow outputs let the caller consume results from this reusable workflow.
     outputs:
+      # `inspection_report` is the output name visible to the caller.
       inspection_report:
+        # Describe the output so callers know what it contains.
         description: "Name of the generated inspection artifact"
+        # Map the workflow output to a job output below.
         value: ${{ jobs.quality-check.outputs.inspection_report }}
 
+# Restrict the GitHub token to the least permission needed here.
 permissions:
+  # Read-only repository access is enough for checkout.
   contents: read
 
+# Every workflow, reusable or normal, defines work under `jobs`.
 jobs:
+  # `quality-check` is the internal job id.
   quality-check:
+    # The job name includes the caller-provided service name for readability.
     name: Check ${{ inputs.service_name }}
+    # Run on GitHub-hosted Ubuntu.
     runs-on: ubuntu-latest
 
+    # Job outputs expose step values to workflow outputs.
     outputs:
+      # This job output reads the artifact name from the `report` step.
       inspection_report: ${{ steps.report.outputs.artifact_name }}
 
+    # Steps run sequentially inside this job.
     steps:
+      # Checkout gives the runner access to files in this repo.
       - name: Checkout repository
+        # `actions/checkout@v4` is the standard checkout action.
         uses: actions/checkout@v4
 
+      # This step fails early if required inputs are unexpectedly empty.
       - name: Validate inputs
+        # Multi-line shell script.
         run: |
+          # `test -n` succeeds only when the string is not empty.
           test -n "${{ inputs.service_name }}"
+          # Validate the environment input is not empty.
           test -n "${{ inputs.deploy_environment }}"
+          # Validate the release version input is not empty.
           test -n "${{ inputs.release_version }}"
 
+      # This step stands in for real checks like tests, linting, or scanning.
       - name: Run placeholder checks
+        # Step environment variables are scoped to this step only.
         env:
+          # Check if the secret exists without printing the secret itself.
           DEMO_API_TOKEN_PRESENT: ${{ secrets.DEMO_API_TOKEN != '' }}
+        # Run shell commands that show what the reusable workflow received.
         run: |
+          # Print the service name input.
           echo "Running checks for service: ${{ inputs.service_name }}"
+          # Print the target environment input.
           echo "Target environment: ${{ inputs.deploy_environment }}"
+          # Print the release version input.
           echo "Release version: ${{ inputs.release_version }}"
+          # Print only whether the optional secret exists.
           echo "Secret DEMO_API_TOKEN configured? $DEMO_API_TOKEN_PRESENT"
+          # Explain where real CI commands would be added later.
           echo "Add your real lint, test, security scan, or Docker build commands here."
 
+      # This step creates a file that humans can download and inspect.
       - name: Create inspection report
+        # The id lets later steps read outputs from this step.
         id: report
+        # Multi-line shell script.
         run: |
+          # Build an artifact name from the input values.
           ARTIFACT_NAME="inspection-${{ inputs.service_name }}-${{ inputs.release_version }}"
 
+          # Group several echo commands so they all write to one Markdown file.
           {
+            # Create a Markdown heading.
             echo "# CI/CD Inspection Report"
+            # Add a blank line for Markdown readability.
             echo ""
+            # Record the service that was checked.
             echo "- Service: ${{ inputs.service_name }}"
+            # Record the target environment.
             echo "- Environment: ${{ inputs.deploy_environment }}"
+            # Record the release identifier.
             echo "- Release version: ${{ inputs.release_version }}"
+            # Record the commit SHA for traceability.
             echo "- Commit: ${{ github.sha }}"
+            # Record who triggered the workflow.
             echo "- Actor: ${{ github.actor }}"
+            # Add a blank line before the explanatory sentence.
             echo ""
+            # Explain the purpose of this artifact.
             echo "This file is an example artifact a reviewer can inspect before a deploy."
+          # Write the grouped output into a Markdown file.
           } > inspection-report.md
 
+          # Publish the artifact name as a step output.
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
+      # This step uploads the generated file so it can be downloaded from GitHub.
       - name: Upload inspection report
+        # `upload-artifact` stores files produced during a workflow run.
         uses: actions/upload-artifact@v4
+        # `with` supplies configuration to the action.
         with:
+          # The artifact name comes from the previous step output.
           name: ${{ steps.report.outputs.artifact_name }}
+          # The path is the file created in the shell script.
           path: inspection-report.md
 
+      # This step writes a short Markdown summary to the GitHub run page.
       - name: Job summary
+        # Multi-line shell script for appending summary text.
         run: |
+          # Add a heading to the summary.
           echo "### Reusable workflow completed" >> "$GITHUB_STEP_SUMMARY"
+          # Add a blank line for Markdown formatting.
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          # Explain the reusable workflow concept in the UI.
           echo "The caller passed inputs into this workflow using \`workflow_call\`." >> "$GITHUB_STEP_SUMMARY"
+          # Show the artifact name for easy discovery.
           echo "Artifact: \`${{ steps.report.outputs.artifact_name }}\`" >> "$GITHUB_STEP_SUMMARY"

@@ -1,95 +1,176 @@
+# This name appears in the GitHub Actions workflow list.
 name: "02 - Manual Inspection Gate"
 
+# This workflow is manual-only so you can practise human inspection safely.
 on:
+  # `workflow_dispatch` creates the "Run workflow" button.
   workflow_dispatch:
+    # Manual inputs become `inputs.<name>` values inside the workflow.
     inputs:
+      # The environment chosen here controls the GitHub Environment gate later.
       target_environment:
+        # This text is shown in the manual run form.
         description: "Environment to inspect"
+        # A target environment is required for the inspection exercise.
         required: true
+        # Default to staging because it is usually safer than production.
         default: "staging"
+        # `choice` prevents typos by forcing a dropdown value.
         type: choice
+        # These are the dropdown choices.
         options:
+          # Development environment option.
           - dev
+          # Staging environment option.
           - staging
+          # Production environment option.
           - prod
+      # The release version identifies what a reviewer is inspecting.
       release_version:
+        # Explain that this could be a version, Docker tag, or commit SHA.
         description: "Release version, image tag, or commit SHA to inspect"
+        # Require it because manual inspection needs a specific target.
         required: true
+        # Provide a harmless default for practising.
         default: "demo-1"
+        # Store the value as plain text.
         type: string
+      # This checkbox controls whether the final fake deploy job runs.
       deploy_after_review:
+        # Explain the effect of the checkbox.
         description: "After the inspection job, run the fake deploy job?"
+        # Require an explicit true/false value.
         required: true
+        # Default to false so the safest path is selected first.
         default: false
+        # Boolean inputs render as checkboxes.
         type: boolean
+      # This input asks the human reviewer to record what they checked.
       reviewer_note:
+        # Describe what should be typed into the note.
         description: "Short note explaining what you checked"
+        # Require a note to build the habit of documenting approvals.
         required: true
+        # Give a sample note so the learner sees the expected format.
         default: "Checked logs, artifact summary, and target environment."
+        # Store the note as text.
         type: string
 
+# Keep the default GitHub token read-only.
 permissions:
+  # This workflow only needs to read repository contents.
   contents: read
 
+# Jobs define the stages of the manual inspection workflow.
 jobs:
+  # First job creates evidence for a human to inspect.
   prepare-inspection:
+    # Human-readable job name.
     name: Prepare Inspection Evidence
+    # Run this job on a GitHub-hosted Ubuntu VM.
     runs-on: ubuntu-latest
 
+    # Steps run in order inside the job.
     steps:
+      # This step writes an inspection checklist file.
       - name: Build inspection checklist
+        # Multi-line shell script.
         run: |
+          # Group echo commands so they write to one Markdown file.
           {
+            # Create a Markdown title.
             echo "# Manual Inspection Checklist"
+            # Add a blank line for readability.
             echo ""
+            # Record the manually selected environment.
             echo "- Target environment: ${{ inputs.target_environment }}"
+            # Record the manually supplied release version.
             echo "- Release version: ${{ inputs.release_version }}"
+            # Record the reviewer's note.
             echo "- Reviewer note: ${{ inputs.reviewer_note }}"
+            # Record who started the workflow.
             echo "- Triggered by: ${{ github.actor }}"
+            # Record the commit SHA connected to the run.
             echo "- Commit: ${{ github.sha }}"
+            # Add a blank line before the checklist section.
             echo ""
+            # Add a second-level Markdown heading.
             echo "## Things to inspect"
+            # Add a blank line before bullets.
             echo ""
+            # Prompt reviewers to verify CI status.
             echo "- Did CI pass?"
+            # Prompt reviewers to verify the release identity.
             echo "- Is this the expected commit or image tag?"
+            # Prompt reviewers to inspect logs for warnings.
             echo "- Are there any warnings in the job logs?"
+            # Prompt reviewers to confirm the deployment target.
             echo "- Does the target environment look correct?"
+          # Write the grouped Markdown into a file.
           } > manual-inspection.md
 
+      # This step uploads the checklist as a downloadable artifact.
       - name: Upload checklist artifact
+        # Artifacts preserve files generated during a workflow run.
         uses: actions/upload-artifact@v4
+        # Configuration for the upload-artifact action.
         with:
+          # Name the artifact with the release version for traceability.
           name: manual-inspection-${{ inputs.release_version }}
+          # Upload the checklist file created in the previous step.
           path: manual-inspection.md
 
+      # This step writes instructions into the GitHub run summary.
       - name: Summary
+        # Multi-line shell script.
         run: |
+          # Add a heading to the summary page.
           echo "### Inspection evidence created" >> "$GITHUB_STEP_SUMMARY"
+          # Tell the reviewer what to do next.
           echo "Download the artifact and read the checklist before approving the next job." >> "$GITHUB_STEP_SUMMARY"
 
+  # Second job demonstrates an environment-protected approval checkpoint.
   protected-review:
+    # Human-readable job name.
     name: Protected Review Checkpoint
+    # Wait for the evidence job before asking for approval.
     needs: prepare-inspection
+    # Use a fresh Ubuntu runner after approval is granted.
     runs-on: ubuntu-latest
 
-    # Configure this environment in GitHub with required reviewers to make
-    # GitHub pause here until a human approves the job.
+    # `environment` connects this job to GitHub Environment protection rules.
     environment:
+      # The environment name comes from the manual input.
       name: ${{ inputs.target_environment }}
 
+    # This job has one confirmation step after GitHub allows it to start.
     steps:
+      # This step proves the environment gate has been passed.
       - name: Confirm protected review passed
+        # Multi-line shell script.
         run: |
+          # If required reviewers are configured, this line runs only after approval.
           echo "GitHub allowed this job to start."
+          # Explain the important condition for the learner.
           echo "If the environment has required reviewers, a human approved it first."
 
+  # Final job is a fake deploy that runs only if the checkbox was selected.
   fake-deploy:
+    # Human-readable job name.
     name: Fake Deploy After Inspection
+    # Wait until the protected review checkpoint succeeds.
     needs: protected-review
+    # Skip this job unless the manual checkbox is true.
     if: ${{ inputs.deploy_after_review == true }}
+    # Run the job on Ubuntu.
     runs-on: ubuntu-latest
+    # The job has one demonstration step.
     steps:
+      # This step prints the deploy intent without changing anything.
       - name: Show deploy intent
+        # Multi-line shell script.
         run: |
+          # Make clear this lab does not modify infrastructure.
           echo "This is still a learning workflow. No infrastructure is changed."
+          # Show what release/environment would be deployed in a real pipeline.
           echo "Would deploy ${{ inputs.release_version }} to ${{ inputs.target_environment }}."
