@@ -1,8 +1,8 @@
 # Copy this to terraform.tfvars and fill in your values
 
 aws_region  = "eu-west-2"
-github_org  = "your-user"
-github_repo = "your-app"
+github_org  = "zainnmg"
+github_repo = "https://github.com/zainnmg/CICD.git"
 
 # IMPORTANT: scope this to your repo and branches
 # For the project, you likely want main branch deploys + PR scans
