@@ -1,53 +1,51 @@
+variable "app_name" {
+  description = "Short name of the application or service."
+  type        = string
+  default     = "ci-cd-lab"
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]+$", var.app_name))
+    error_message = "Use lowercase letters, numbers, and hyphens only."
+  }
+}
+
+variable "environment" {
+  description = "Deployment environment name."
+  type        = string
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], lower(var.environment))
+    error_message = "Environment must be dev, staging, or prod."
+  }
+}
+
 variable "aws_region" {
-  description = "AWS region"
+  description = "Example non-secret config. This lab does not connect to AWS."
   type        = string
   default     = "eu-west-2"
 }
 
-variable "role_name" {
-  description = "Name of the IAM role for GitHub Actions"
+variable "image_tag" {
+  description = "Example release or image tag that a pipeline might pass in."
   type        = string
-  default     = "github-actions-ecs-deploy"
+  default     = "local"
 }
 
-variable "github_org" {
-  description = "Your GitHub organisation or username"
-  type        = string
-}
-
-variable "github_repo" {
-  description = "Your GitHub repository name"
-  type        = string
-}
-
-variable "allowed_subjects" {
-  description = <<-EOT
-    List of GitHub OIDC subject claims allowed to assume the role.
-    Format: repo:<org>/<repo>:ref:refs/heads/<branch>
-            repo:<org>/<repo>:pull_request
-
-    Examples:
-      - "repo:CoderCo/my-app:ref:refs/heads/main"     -> only main branch
-      - "repo:CoderCo/my-app:pull_request"             -> PR workflows
-      - "repo:CoderCo/my-app:*"                        -> any branch (less secure)
-  EOT
+variable "reviewers" {
+  description = "People or teams expected to inspect a production change."
   type        = list(string)
   default     = []
 }
 
-variable "ecr_repository_name" {
-  description = "Name of the ECR repository the pipeline pushes to"
-  type        = string
+variable "tags" {
+  description = "Example map variable for labels you would put on real resources."
+  type        = map(string)
+  default     = {}
 }
 
-variable "ecs_task_execution_role_name" {
-  description = "Name of the ECS task execution IAM role (the role ECS uses to pull images and write logs)"
+variable "demo_api_token" {
+  description = "Example sensitive value. Pass with TF_VAR_demo_api_token, not in a committed tfvars file."
   type        = string
-  default     = "ecsTaskExecutionRole"
-}
-
-variable "ecs_task_role_name" {
-  description = "Name of the ECS task IAM role (the role your application code assumes at runtime)"
-  type        = string
-  default     = "ecsTaskRole"
+  default     = ""
+  sensitive   = true
 }

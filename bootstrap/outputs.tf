@@ -1,14 +1,19 @@
-output "role_arn" {
-  description = "ARN of the IAM role for GitHub Actions - add this to your repo secrets as AWS_ROLE_ARN"
-  value       = aws_iam_role.github_actions.arn
+output "release_name" {
+  description = "Example release name assembled from input variables and locals."
+  value       = local.release_name
 }
 
-output "oidc_provider_arn" {
-  description = "ARN of the GitHub OIDC provider"
-  value       = aws_iam_openid_connect_provider.github.arn
+output "common_tags" {
+  description = "Merged tag map that would be applied to real infrastructure."
+  value       = local.common_tags
 }
 
-output "role_name" {
-  description = "Name of the IAM role"
-  value       = aws_iam_role.github_actions.name
+output "review_required" {
+  description = "Example policy decision: production requires at least one reviewer."
+  value       = local.normalized_environment == "prod" && length(var.reviewers) > 0
+}
+
+output "demo_api_token_was_set" {
+  description = "Shows whether a sensitive variable was provided without printing it."
+  value       = nonsensitive(var.demo_api_token) != ""
 }

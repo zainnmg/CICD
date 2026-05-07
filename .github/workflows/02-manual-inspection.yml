@@ -1,0 +1,95 @@
+name: "02 - Manual Inspection Gate"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Environment to inspect"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      release_version:
+        description: "Release version, image tag, or commit SHA to inspect"
+        required: true
+        default: "demo-1"
+        type: string
+      deploy_after_review:
+        description: "After the inspection job, run the fake deploy job?"
+        required: true
+        default: false
+        type: boolean
+      reviewer_note:
+        description: "Short note explaining what you checked"
+        required: true
+        default: "Checked logs, artifact summary, and target environment."
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-inspection:
+    name: Prepare Inspection Evidence
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Build inspection checklist
+        run: |
+          {
+            echo "# Manual Inspection Checklist"
+            echo ""
+            echo "- Target environment: ${{ inputs.target_environment }}"
+            echo "- Release version: ${{ inputs.release_version }}"
+            echo "- Reviewer note: ${{ inputs.reviewer_note }}"
+            echo "- Triggered by: ${{ github.actor }}"
+            echo "- Commit: ${{ github.sha }}"
+            echo ""
+            echo "## Things to inspect"
+            echo ""
+            echo "- Did CI pass?"
+            echo "- Is this the expected commit or image tag?"
+            echo "- Are there any warnings in the job logs?"
+            echo "- Does the target environment look correct?"
+          } > manual-inspection.md
+
+      - name: Upload checklist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-inspection-${{ inputs.release_version }}
+          path: manual-inspection.md
+
+      - name: Summary
+        run: |
+          echo "### Inspection evidence created" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download the artifact and read the checklist before approving the next job." >> "$GITHUB_STEP_SUMMARY"
+
+  protected-review:
+    name: Protected Review Checkpoint
+    needs: prepare-inspection
+    runs-on: ubuntu-latest
+
+    # Configure this environment in GitHub with required reviewers to make
+    # GitHub pause here until a human approves the job.
+    environment:
+      name: ${{ inputs.target_environment }}
+
+    steps:
+      - name: Confirm protected review passed
+        run: |
+          echo "GitHub allowed this job to start."
+          echo "If the environment has required reviewers, a human approved it first."
+
+  fake-deploy:
+    name: Fake Deploy After Inspection
+    needs: protected-review
+    if: ${{ inputs.deploy_after_review == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show deploy intent
+        run: |
+          echo "This is still a learning workflow. No infrastructure is changed."
+          echo "Would deploy ${{ inputs.release_version }} to ${{ inputs.target_environment }}."

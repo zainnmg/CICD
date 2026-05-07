@@ -1,0 +1,110 @@
+name: "01 - Variables and Workflow Calls"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Environment name to pass into the reusable workflow"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      release_version:
+        description: "Optional release label. Leave blank to use the commit SHA."
+        required: false
+        type: string
+      run_manual_deploy_preview:
+        description: "Run the fake deploy preview after checks finish?"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# Workflow-level env is available to every job unless a lower scope overrides it.
+env:
+  WORKFLOW_SCOPE_EXAMPLE: "visible to every job in this workflow"
+  DEFAULT_REGION: ${{ vars.DEFAULT_REGION || 'eu-west-2' }}
+
+jobs:
+  explain-variables:
+    name: Explain Variable Storage
+    runs-on: ubuntu-latest
+
+    # Job-level env is available to every step in this job only.
+    env:
+      JOB_SCOPE_EXAMPLE: "visible only inside explain-variables"
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment || 'dev' }}
+
+    outputs:
+      release_version: ${{ steps.version.outputs.release_version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Choose release version
+        id: version
+        run: |
+          RELEASE_VERSION="${{ inputs.release_version }}"
+
+          if [ -z "$RELEASE_VERSION" ]; then
+            RELEASE_VERSION="${GITHUB_SHA::7}"
+          fi
+
+          echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Show where values came from
+        env:
+          # Step-level env is the narrowest scope. Use it for one-off values.
+          STEP_SCOPE_EXAMPLE: "visible only inside this step"
+          DEMO_API_TOKEN_PRESENT: ${{ secrets.DEMO_API_TOKEN != '' }}
+        run: |
+          echo "Workflow env: $WORKFLOW_SCOPE_EXAMPLE"
+          echo "Repository/environment variable DEFAULT_REGION: $DEFAULT_REGION"
+          echo "Job env TARGET_ENVIRONMENT: $TARGET_ENVIRONMENT"
+          echo "Step env: $STEP_SCOPE_EXAMPLE"
+          echo "Secret DEMO_API_TOKEN configured? $DEMO_API_TOKEN_PRESENT"
+          echo "Release version: ${{ steps.version.outputs.release_version }}"
+
+      - name: Write learning summary
+        run: |
+          {
+            echo "### Variable storage demo"
+            echo ""
+            echo "| Value | Where it is stored | Why use it |"
+            echo "| --- | --- | --- |"
+            echo "| WORKFLOW_SCOPE_EXAMPLE | Workflow env block | Shared non-sensitive value for this file |"
+            echo "| TARGET_ENVIRONMENT | Manual input/job env | Value chosen per run |"
+            echo "| DEFAULT_REGION | GitHub Actions variable | Non-secret config managed in GitHub UI |"
+            echo "| DEMO_API_TOKEN | GitHub Actions secret | Sensitive value that must not print in logs |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  call-reusable-quality-check:
+    name: Call Reusable Quality Check
+    needs: explain-variables
+    uses: ./.github/workflows/reusable-quality-check.yml
+    with:
+      service_name: "demo-api"
+      deploy_environment: ${{ inputs.target_environment || 'dev' }}
+      release_version: ${{ needs.explain-variables.outputs.release_version }}
+    secrets: inherit
+
+  fake-deploy-preview:
+    name: Fake Deploy Preview
+    needs: call-reusable-quality-check
+    if: ${{ inputs.run_manual_deploy_preview == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preview deploy command
+        run: |
+          echo "This is a dry run. Nothing is deployed."
+          echo "In a real pipeline this job might run after manual approval."

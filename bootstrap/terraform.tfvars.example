@@ -1,0 +1,17 @@
+app_name    = "ci-cd-lab"
+environment = "dev"
+aws_region  = "eu-west-2"
+image_tag   = "demo-1"
+
+reviewers = [
+  "your-github-username",
+]
+
+tags = {
+  owner       = "devops-learning"
+  cost_center = "training"
+}
+
+# Do not put real secrets in this file.
+# For sensitive variables, prefer:
+# export TF_VAR_demo_api_token="example-token"

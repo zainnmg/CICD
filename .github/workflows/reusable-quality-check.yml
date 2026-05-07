@@ -1,0 +1,88 @@
+name: "Reusable - Quality Check"
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: "Name of the service being checked"
+        required: true
+        type: string
+      deploy_environment:
+        description: "Environment the caller wants to target"
+        required: true
+        type: string
+      release_version:
+        description: "Release label or image tag being inspected"
+        required: true
+        type: string
+    secrets:
+      DEMO_API_TOKEN:
+        description: "Optional demo secret passed by the caller"
+        required: false
+    outputs:
+      inspection_report:
+        description: "Name of the generated inspection artifact"
+        value: ${{ jobs.quality-check.outputs.inspection_report }}
+
+permissions:
+  contents: read
+
+jobs:
+  quality-check:
+    name: Check ${{ inputs.service_name }}
+    runs-on: ubuntu-latest
+
+    outputs:
+      inspection_report: ${{ steps.report.outputs.artifact_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          test -n "${{ inputs.service_name }}"
+          test -n "${{ inputs.deploy_environment }}"
+          test -n "${{ inputs.release_version }}"
+
+      - name: Run placeholder checks
+        env:
+          DEMO_API_TOKEN_PRESENT: ${{ secrets.DEMO_API_TOKEN != '' }}
+        run: |
+          echo "Running checks for service: ${{ inputs.service_name }}"
+          echo "Target environment: ${{ inputs.deploy_environment }}"
+          echo "Release version: ${{ inputs.release_version }}"
+          echo "Secret DEMO_API_TOKEN configured? $DEMO_API_TOKEN_PRESENT"
+          echo "Add your real lint, test, security scan, or Docker build commands here."
+
+      - name: Create inspection report
+        id: report
+        run: |
+          ARTIFACT_NAME="inspection-${{ inputs.service_name }}-${{ inputs.release_version }}"
+
+          {
+            echo "# CI/CD Inspection Report"
+            echo ""
+            echo "- Service: ${{ inputs.service_name }}"
+            echo "- Environment: ${{ inputs.deploy_environment }}"
+            echo "- Release version: ${{ inputs.release_version }}"
+            echo "- Commit: ${{ github.sha }}"
+            echo "- Actor: ${{ github.actor }}"
+            echo ""
+            echo "This file is an example artifact a reviewer can inspect before a deploy."
+          } > inspection-report.md
+
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload inspection report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.report.outputs.artifact_name }}
+          path: inspection-report.md
+
+      - name: Job summary
+        run: |
+          echo "### Reusable workflow completed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "The caller passed inputs into this workflow using \`workflow_call\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifact: \`${{ steps.report.outputs.artifact_name }}\`" >> "$GITHUB_STEP_SUMMARY"
